@@ -16,8 +16,9 @@ STEP_KG = 200.0
 
 st.sidebar.header("⚙️ Parametry Docelowe Blend do uzyskania")
 
-docelowa_ilosc = st.sidebar.number_input(
-    "Docelowa ilość [KG]", value=100000.0, step=STEP_KG
+# Docelowa masa dotyczy wyłącznie surowców (koncentratów)
+docelowa_ilosc_koncentratu = st.sidebar.number_input(
+    "Docelowa ilość KONCENTRATU [KG]", value=100000.0, step=STEP_KG
 )
 docelowy_brix = st.sidebar.number_input(
     "Sztywny / Min Brix [°Bx]", value=70.0, step=0.1
@@ -133,13 +134,11 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
           v_vars[t_id] = n_vars[t_id] * STEP_KG
           prob += n_vars[t_id] <= max_steps * y_vars[t_id]
 
-      # ZMIANA LOGIKI MASY CAŁKOWITEJ:
-      # Pozwalamy na niewielki margines +-100kg całkowitej masy, by woda nie była zmuszona być wielokrotnością 200kg
-      if pozwol_na_wode:
-        prob += lpSum([v_vars[t] for t in v_vars]) >= docelowa_ilosc - 100.0
-        prob += lpSum([v_vars[t] for t in v_vars]) <= docelowa_ilosc + 100.0
-      else:
-        prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
+      # SZTYWNY BILANS MASY SAMYCH KONCENTRATÓW:
+      prob += (
+          lpSum([v_vars[t] for t in v_vars if t != "WODA (Dodatek)"])
+          == docelowa_ilosc_koncentratu
+      )
 
       # Limit liczby użytych tanków (bez wody)
       prob += (
@@ -148,54 +147,57 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
       )
 
       # LOGIKA BRIXA:
+      # Masa całkowita = Masa koncentratów + Masa wody
+      masa_calkowita = lpSum([v_vars[t] for t in v_vars])
+
       if pozwol_na_wode:
-        # Woda zbieje dokładnie całkowity Brix do poziomu docelowego
+        # Woda dociąga wypadkowy Brix do docelowego
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
                 for _, row in df.iterrows()
             ])
-            == lpSum([v_vars[t] for t in v_vars]) * docelowy_brix
+            == masa_calkowita * docelowy_brix
         )
       else:
+        # Bez wody - Brix samych koncentratów musi być przynajmniej równy docelowemu
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
                 for _, row in df.iterrows()
             ])
-            >= docelowa_ilosc * docelowy_brix
+            >= docelowa_ilosc_koncentratu * docelowy_brix
         )
 
-      # Bilans Kwasowości
+      # Bilans Kwasowości i Barwy odniesiony do MASY CAŁKOWITEJ (koncentraty + woda)
       prob += (
           lpSum([
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
               for _, row in df.iterrows()
           ])
-          >= lpSum([v_vars[t] for t in v_vars]) * kwas_min
+          >= masa_calkowita * kwas_min
       )
       prob += (
           lpSum([
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
               for _, row in df.iterrows()
           ])
-          <= lpSum([v_vars[t] for t in v_vars]) * kwas_max
+          <= masa_calkowita * kwas_max
       )
 
-      # Bilans Barwy
       prob += (
           lpSum([
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
               for _, row in df.iterrows()
           ])
-          >= lpSum([v_vars[t] for t in v_vars]) * barwa_min
+          >= masa_calkowita * barwa_min
       )
       prob += (
           lpSum([
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
               for _, row in df.iterrows()
           ])
-          <= lpSum([v_vars[t] for t in v_vars]) * barwa_max
+          <= masa_calkowita * barwa_max
       )
 
       suma_kwasu = lpSum([
@@ -338,7 +340,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
         if res:
           st.success(f"{opisy} | Użyte tanki: {res['uzyte_tanki']}")
           col1, col2, col3, col4 = st.columns(4)
-          col1.metric("Łączna masa", f"{res['tot_mass']:.1f} KG")
+          col1.metric("Masa Całkowita (z wodą)", f"{res['tot_mass']:.1f} KG")
           col2.metric("Wynikowy Brix", f"{res['brix']} °Bx")
 
           kwas_val = (
