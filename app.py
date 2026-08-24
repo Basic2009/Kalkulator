@@ -9,12 +9,12 @@ st.set_page_config(page_title="Kalkulator Blendowania TW", layout="wide")
 st.title("🍹 Kalkulator Blendów")
 st.markdown("---")
 
+#Link do pliku
+gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
+
 # Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe Blend do uzyskania")
 
-gdrive_id = st.sidebar.text_input(
-    "ID pliku Google Drive", value="1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
-)
 docelowa_ilosc = st.sidebar.number_input(
     "Docelowa ilość [KG]", value=100000.0, step=100.0
 )
