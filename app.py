@@ -22,6 +22,11 @@ docelowy_brix = st.sidebar.number_input(
     "Sztywny / Min Brix [°Bx]", value=70.0, step=0.1
 )
 
+# NOWY PARAMETR: Ograniczenie liczby użytych tanków
+max_uzytych_tankow = st.sidebar.number_input(
+    "Maksymalna liczba zbiorników", value=5, min_value=1, max_value=40, step=1
+)
+
 st.sidebar.subheader("Kwasowość")
 kwas_jednostka = st.sidebar.radio(
     "Jednostka Kwasowości", ["CA", "MA"], horizontal=True
@@ -122,9 +127,14 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
       # Bilans masy całkowitej
       prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
 
+      # NOWE OGRANICZENIE: Limit liczby użytych tanków (z wyłączeniem dodawanej wody)
+      prob += (
+          lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
+          <= max_uzytych_tankow
+      )
+
       # LOGIKA BRIXA:
       if pozwol_na_wode:
-        # Gdy woda jest WŁĄCZONA: sztywny cel Brixa (woda zbieje wyższe wartości idealnie do celu)
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
@@ -133,7 +143,6 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
             == docelowa_ilosc * docelowy_brix
         )
       else:
-        # Gdy woda jest WYŁĄCZONA: Brix MUSI być co najmniej równy docelowemu (może być wyższy)
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
@@ -326,7 +335,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
           st.dataframe(res["sklad"], use_container_width=True)
         else:
-          st.error("Brak możliwości ułożenia blendu w podanych zakresach (sprawdź czy suma surowców daje wymaganą ilość/Brix/kwas/barwę).")
+          st.error(f"Brak możliwości ułożenia blendu w podanych zakresach. Zwiększ limit zbiorników (obecny: {max_uzytych_tankow}) lub poszerz zakresy kwasowości/barwy.")
 
   except Exception as e:
     st.error(f"Błąd przetwarzania: {e}")
