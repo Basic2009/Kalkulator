@@ -202,22 +202,18 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
           pobrano = round(val, 1)
           stan_przed = float(row["Ilość (KG)"])
           zablokowane = float(row["Zablokowana Ilość"])
-          dostepne_netto = float(row["Dostępne_Netto"])
+          dostepne = float(row["Dostępne_Netto"])
 
           is_woda = t == "WODA (Dodatek)"
-          pozostanie_ogolem = 0.0 if is_woda else round(stan_przed - pobrano, 1)
-          pozostanie_netto = (
-              0.0 if is_woda else round(dostepne_netto - pobrano, 1)
-          )
+          pozostanie = 0.0 if is_woda else round(dostepne - pobrano, 1)
 
           wyniki.append({
               "Zbiornik": t,
               "Pobrano [KG]": pobrano,
               "Stan Przed [KG]": "—" if is_woda else stan_przed,
               "Zablokowane [KG]": "—" if is_woda else zablokowane,
-              "Dostępne Netto [KG]": "—" if is_woda else dostepne_netto,
-              "Pozostanie Ogółem [KG]": "—" if is_woda else pozostanie_ogolem,
-              "Pozostanie Netto [KG]": "—" if is_woda else pozostanie_netto,
+              "Dostępne [KG]": "—" if is_woda else dostepne,
+              "Pozostanie [KG]": "—" if is_woda else pozostanie,
               "Brix [°Bx]": float(row["Brix"]),
               "Kwas MA": (
                   float(row["Kwasowość (MA)"])
