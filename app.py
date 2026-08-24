@@ -6,7 +6,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Kalkulator Blendowania TW", layout="wide")
 
-st.title("🍹 System Optymalizacji Kupaży Koncentratów (TW-1 .. TW-40)")
+st.title("🍹 Kalkulator Blendów")
 st.markdown("---")
 
 # Sidebar - Parametry wejściowe
