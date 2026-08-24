@@ -12,8 +12,8 @@ st.markdown("---")
 # Link do pliku
 gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 
-# Krok inkrementu
-STEP_KG = 500.0
+# Krok inkrementu dla zbiorników
+STEP_KG = 200.0
 
 # Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe Blend do uzyskania")
@@ -118,25 +118,26 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
     def licz_blend(podejscie):
       prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
-      n_vars = {} # Liczba porcji po 500 kg
-      v_vars = {} # Łączna masa = n * 500 kg
-      y_vars = {} # Flaga użycia zbiornika (0 lub 1)
+      v_vars = {} # Masa pobrana ze zbiornika
+      y_vars = {} # Flaga użycia zbiornika
 
       for idx, row in df.iterrows():
         t_id = str(row["Zbiornik"]).strip()
         max_kg = float(row["Dostępne_Netto"])
         
-        # Maksymalna liczba porcji po 500 kg, jaka mieści się w zbiorniku
-        max_steps = int(max_kg // STEP_KG)
-        
-        n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
-        y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
-        
-        # Masa wyrażona jako kroki po 500 kg
-        v_vars[t_id] = n_vars[t_id] * STEP_KG
-        
-        # Powiązanie pobrania z flagą aktywności zbiornika
-        prob += n_vars[t_id] <= max_steps * y_vars[t_id]
+        if t_id == "WODA (Dodatek)":
+          # Woda: zmienna ciągła (dowolny ułamek / dokładna ilość)
+          v_vars[t_id] = LpVariable(f"v_{idx}", 0, max_kg)
+          y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
+          prob += v_vars[t_id] <= max_kg * y_vars[t_id]
+        else:
+          # Zbiorniki surowca: porcjowanie wyłącznie po 500 kg
+          max_steps = int(max_kg // STEP_KG)
+          n_var = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
+          y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
+          
+          v_vars[t_id] = n_var * STEP_KG
+          prob += n_var <= max_steps * y_vars[t_id]
 
       # Bilans masy całkowitej
       prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
@@ -230,14 +231,18 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
       for _, row in df.iterrows():
         t = str(row["Zbiornik"]).strip()
-        val = v_vars[t].value()
+        
+        # Pobieranie wyliczonej wartości z solvera
+        val = v_vars[t].value() if t == "WODA (Dodatek)" else v_vars[t].value()
+        
         if val and val > 0.1:
-          pobrano = int(round(val))
+          is_woda = t == "WODA (Dodatek)"
+          pobrano = round(val, 1) if is_woda else int(round(val))
+          
           stan_aktualny = float(row["Ilość (KG)"])
           zablokowane = float(row["Zablokowana Ilość"])
           dostepne = float(row["Dostępne_Netto"])
 
-          is_woda = t == "WODA (Dodatek)"
           pozostanie = 0.0 if is_woda else round(dostepne - pobrano, 1)
 
           wyniki.append({
