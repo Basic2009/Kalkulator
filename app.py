@@ -9,7 +9,7 @@ st.set_page_config(page_title="Kalkulator Blendowania TW", layout="wide")
 st.title("🍹 Kalkulator Blendów")
 st.markdown("---")
 
-#Link do pliku
+# Link do pliku
 gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 
 # Sidebar - Parametry wejściowe
@@ -19,7 +19,7 @@ docelowa_ilosc = st.sidebar.number_input(
     "Docelowa ilość [KG]", value=100000.0, step=100.0
 )
 docelowy_brix = st.sidebar.number_input(
-    "Sztywny Brix [°Bx]", value=70.0, step=0.1
+    "Sztywny / Min Brix [°Bx]", value=70.0, step=0.1
 )
 
 st.sidebar.subheader("Kwasowość")
@@ -122,14 +122,24 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
       # Bilans masy całkowitej
       prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
 
-      # Sztywny Brix wymuszamy TYLKO wtedy, gdy dozwolony jest dodatek wody
+      # LOGIKA BRIXA:
       if pozwol_na_wode:
+        # Gdy woda jest WŁĄCZONA: sztywny cel Brixa (woda zbieje wyższe wartości idealnie do celu)
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
                 for _, row in df.iterrows()
             ])
             == docelowa_ilosc * docelowy_brix
+        )
+      else:
+        # Gdy woda jest WYŁĄCZONA: Brix MUSI być co najmniej równy docelowemu (może być wyższy)
+        prob += (
+            lpSum([
+                v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
+                for _, row in df.iterrows()
+            ])
+            >= docelowa_ilosc * docelowy_brix
         )
 
       # Bilans Kwasowości
@@ -316,7 +326,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
           st.dataframe(res["sklad"], use_container_width=True)
         else:
-          st.error("Brak możliwości ułożenia blendu w podanych zakresach.")
+          st.error("Brak możliwości ułożenia blendu w podanych zakresach (sprawdź czy suma surowców daje wymaganą ilość/Brix/kwas/barwę).")
 
   except Exception as e:
     st.error(f"Błąd przetwarzania: {e}")
