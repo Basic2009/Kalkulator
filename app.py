@@ -16,10 +16,10 @@ gdrive_id = st.sidebar.text_input(
     "ID pliku Google Drive", value="1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 )
 docelowa_ilosc = st.sidebar.number_input(
-    "Docelowa ilość [KG]", value=10000.0, step=500.0
+    "Docelowa ilość [KG]", value=100000.0, step=100.0
 )
 docelowy_brix = st.sidebar.number_input(
-    "Sztywny Brix [°Bx]", value=65.0, step=0.1
+    "Sztywny Brix [°Bx]", value=70.0, step=0.1
 )
 
 st.sidebar.subheader("Kwasowość")
@@ -27,8 +27,8 @@ kwas_jednostka = st.sidebar.radio(
     "Jednostka Kwasowości", ["CA", "MA"], horizontal=True
 )
 col_k1, col_k2 = st.sidebar.columns(2)
-kwas_min = col_k1.number_input("Kwas MIN", value=2.1, step=0.05)
-kwas_max = col_k2.number_input("Kwas MAX", value=2.3, step=0.05)
+kwas_min = col_k1.number_input("Kwas MIN", value=2.2, step=0.01)
+kwas_max = col_k2.number_input("Kwas MAX", value=2.4, step=0.01)
 
 st.sidebar.subheader("Barwa")
 barwa_jednostka = st.sidebar.radio(
@@ -37,17 +37,17 @@ barwa_jednostka = st.sidebar.radio(
 col_b1, col_b2 = st.sidebar.columns(2)
 barwa_min = col_b1.number_input(
     "Barwa MIN",
-    value=40.0 if barwa_jednostka == "T" else 0.20,
-    step=1.0 if barwa_jednostka == "T" else 0.05,
+    value=40.0 if barwa_jednostka == "T" else 0.40,
+    step=0.5 if barwa_jednostka == "T" else 0.01,
 )
 barwa_max = col_b2.number_input(
     "Barwa MAX",
-    value=50.0 if barwa_jednostka == "T" else 0.40,
-    step=1.0 if barwa_jednostka == "T" else 0.05,
+    value=50.0 if barwa_jednostka == "T" else 0.50,
+    step=0.5 if barwa_jednostka == "T" else 0.01,
 )
 
 pozwol_na_wode = st.sidebar.checkbox(
-    "Dolewaj wodę gdy Brix za wysoki", value=True
+    "Zbijanie Brixa wodą", value=True
 )
 
 
