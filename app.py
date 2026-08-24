@@ -127,7 +127,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
                         'Zbiornik': t, 
                         'Pobrano [KG]': round(val, 1), 
                         'Dostępne Netto [KG]': float(row['Dostępne_Netto']),
-                        'Zablokowano [KG]': float(row['Zablokowana Ilość'])
+                        'Zablokowane [KG]': float(row['Zablokowana Ilość'])
                     })
                     tot_mass += val
                     tot_brix += val * float(row['Brix'])
