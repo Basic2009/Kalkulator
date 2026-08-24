@@ -9,13 +9,11 @@ st.set_page_config(page_title="Kalkulator Blendowania TW", layout="wide")
 st.title("🍹 Kalkulator Blendów")
 st.markdown("---")
 
-# Link do pliku
 gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 
-# Krok inkrementu dla zbiorników
-STEP_KG = 500.0
+# Krok inkrementu dla zbiorników (kg)
+STEP_KG = 200.0
 
-# Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe Blend do uzyskania")
 
 docelowa_ilosc = st.sidebar.number_input(
@@ -25,7 +23,6 @@ docelowy_brix = st.sidebar.number_input(
     "Sztywny / Min Brix [°Bx]", value=70.0, step=0.1
 )
 
-# Ograniczenie liczby użytych tanków
 max_uzytych_tankow = st.sidebar.number_input(
     "Maksymalna liczba zbiorników", value=5, min_value=1, max_value=40, step=1
 )
@@ -59,7 +56,6 @@ pozwol_na_wode = st.sidebar.checkbox(
 )
 
 
-# Pobieranie danych
 @st.cache_data(ttl=5)
 def pobierz_dane(file_id):
   url = f"https://drive.google.com/uc?export=download&id={file_id}"
@@ -118,31 +114,31 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
     def licz_blend(podejscie):
       prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
-      v_vars = {} # Masa pobrana ze zbiornika
-      y_vars = {} # Flaga użycia zbiornika
+      v_vars = {} 
+      y_vars = {} 
+      n_vars = {}
 
       for idx, row in df.iterrows():
         t_id = str(row["Zbiornik"]).strip()
         max_kg = float(row["Dostępne_Netto"])
         
+        y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
+
         if t_id == "WODA (Dodatek)":
-          # Woda: zmienna ciągła (dowolny ułamek / dokładna ilość)
-          v_vars[t_id] = LpVariable(f"v_{idx}", 0, max_kg)
-          y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
+          # Woda: czysta zmienna ciągła bez zaokrągleń
+          v_vars[t_id] = LpVariable(f"v_woda_{idx}", 0, max_kg)
           prob += v_vars[t_id] <= max_kg * y_vars[t_id]
         else:
-          # Zbiorniki surowca: porcjowanie wyłącznie po 500 kg
+          # Surowce: porcjowanie całkowite
           max_steps = int(max_kg // STEP_KG)
-          n_var = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
-          y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
-          
-          v_vars[t_id] = n_var * STEP_KG
-          prob += n_var <= max_steps * y_vars[t_id]
+          n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
+          v_vars[t_id] = n_vars[t_id] * STEP_KG
+          prob += n_vars[t_id] <= max_steps * y_vars[t_id]
 
       # Bilans masy całkowitej
       prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
 
-      # Limit liczby użytych tanków (z wyłączeniem wody)
+      # Limit liczby użytych tanków (bez wody)
       prob += (
           lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
           <= max_uzytych_tankow
@@ -231,12 +227,14 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
       for _, row in df.iterrows():
         t = str(row["Zbiornik"]).strip()
-        
-        # Pobieranie wyliczonej wartości z solvera
-        val = v_vars[t].value() if t == "WODA (Dodatek)" else v_vars[t].value()
-        
-        if val and val > 0.1:
-          is_woda = t == "WODA (Dodatek)"
+        is_woda = (t == "WODA (Dodatek)")
+
+        if is_woda:
+          val = v_vars[t].varValue
+        else:
+          val = n_vars[t].varValue * STEP_KG if n_vars[t].varValue is not None else 0.0
+
+        if val and val > 0.001:
           pobrano = round(val, 1) if is_woda else int(round(val))
           
           stan_aktualny = float(row["Ilość (KG)"])
@@ -354,7 +352,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
           st.dataframe(res["sklad"], use_container_width=True)
         else:
-          st.error(f"Brak możliwości ułożenia blendu z porcjami po 500 kg. Zwiększ limit zbiorników (obecny: {max_uzytych_tankow}) lub poszerz zakresy kwasowości/barwy.")
+          st.error(f"Brak możliwości ułożenia blendu z porcjami po {int(STEP_KG)} kg. Zwiększ limit zbiorników (obecny: {max_uzytych_tankow}) lub poszerz zakresy kwasowości/barwy.")
 
   except Exception as e:
     st.error(f"Błąd przetwarzania: {e}")
