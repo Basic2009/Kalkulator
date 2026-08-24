@@ -13,7 +13,7 @@ st.markdown("---")
 gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 
 # Krok inkrementu dla zbiorników
-STEP_KG = 200.0
+STEP_KG = 500.0
 
 # Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe Blend do uzyskania")
