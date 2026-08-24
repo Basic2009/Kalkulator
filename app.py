@@ -57,7 +57,7 @@ pozwol_na_wode = st.sidebar.checkbox(
 )
 
 
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=60)
 def pobierz_dane(file_id):
   url = f"https://drive.google.com/uc?export=download&id={file_id}"
   response = requests.get(url)
