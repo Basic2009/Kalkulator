@@ -122,7 +122,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
       # Bilans masy całkowitej
       prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
 
-      # ZMIANA: Sztywny Brix wymuszamy TYLKO wtedy, gdy dozwolony jest dodatek wody
+      # Sztywny Brix wymuszamy TYLKO wtedy, gdy dozwolony jest dodatek wody
       if pozwol_na_wode:
         prob += (
             lpSum([
@@ -199,12 +199,48 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
         t = str(row["Zbiornik"]).strip()
         val = v_vars[t].varValue
         if val and val > 0.1:
+          pobrano = round(val, 1)
+          stan_przed = float(row["Ilość (KG)"])
+          zablokowane = float(row["Zablokowana Ilość"])
+          dostepne_netto = float(row["Dostępne_Netto"])
+
+          is_woda = t == "WODA (Dodatek)"
+          pozostanie_ogolem = 0.0 if is_woda else round(stan_przed - pobrano, 1)
+          pozostanie_netto = (
+              0.0 if is_woda else round(dostepne_netto - pobrano, 1)
+          )
+
           wyniki.append({
               "Zbiornik": t,
-              "Pobrano [KG]": round(val, 1),
-              "Dostępne Netto [KG]": float(row["Dostępne_Netto"]),
-              "Zablokowane [KG]": float(row["Zablokowana Ilość"]),
+              "Pobrano [KG]": pobrano,
+              "Stan Przed [KG]": "—" if is_woda else stan_przed,
+              "Zablokowane [KG]": "—" if is_woda else zablokowane,
+              "Dostępne Netto [KG]": "—" if is_woda else dostepne_netto,
+              "Pozostanie Ogółem [KG]": "—" if is_woda else pozostanie_ogolem,
+              "Pozostanie Netto [KG]": "—" if is_woda else pozostanie_netto,
+              "Brix [°Bx]": float(row["Brix"]),
+              "Kwas MA": (
+                  float(row["Kwasowość (MA)"])
+                  if "Kwasowość (MA)" in df.columns
+                  else None
+              ),
+              "Kwas CA": (
+                  float(row["Kwasowość (CA)"])
+                  if "Kwasowość (CA)" in df.columns
+                  else None
+              ),
+              "Barwa T [%]": (
+                  float(row["Barwa (T)"])
+                  if "Barwa (T)" in df.columns
+                  else None
+              ),
+              "Barwa A": (
+                  float(row["Barwa (A)"])
+                  if "Barwa (A)" in df.columns
+                  else None
+              ),
           })
+
           tot_mass += val
           tot_brix += val * float(row["Brix"])
           if "Kwasowość (MA)" in df.columns:
