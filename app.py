@@ -125,18 +125,21 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
         y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
 
         if t_id == "WODA (Dodatek)":
-          # Woda: czysta zmienna ciągła bez zaokrągleń
           v_vars[t_id] = LpVariable(f"v_woda_{idx}", 0, max_kg)
           prob += v_vars[t_id] <= max_kg * y_vars[t_id]
         else:
-          # Surowce: porcjowanie całkowite
           max_steps = int(max_kg // STEP_KG)
           n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
           v_vars[t_id] = n_vars[t_id] * STEP_KG
           prob += n_vars[t_id] <= max_steps * y_vars[t_id]
 
-      # Bilans masy całkowitej
-      prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
+      # ZMIANA LOGIKI MASY CAŁKOWITEJ:
+      # Pozwalamy na niewielki margines +-100kg całkowitej masy, by woda nie była zmuszona być wielokrotnością 200kg
+      if pozwol_na_wode:
+        prob += lpSum([v_vars[t] for t in v_vars]) >= docelowa_ilosc - 100.0
+        prob += lpSum([v_vars[t] for t in v_vars]) <= docelowa_ilosc + 100.0
+      else:
+        prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
 
       # Limit liczby użytych tanków (bez wody)
       prob += (
@@ -146,12 +149,13 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
       # LOGIKA BRIXA:
       if pozwol_na_wode:
+        # Woda zbieje dokładnie całkowity Brix do poziomu docelowego
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
                 for _, row in df.iterrows()
             ])
-            == docelowa_ilosc * docelowy_brix
+            == lpSum([v_vars[t] for t in v_vars]) * docelowy_brix
         )
       else:
         prob += (
@@ -168,14 +172,14 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
               for _, row in df.iterrows()
           ])
-          >= docelowa_ilosc * kwas_min
+          >= lpSum([v_vars[t] for t in v_vars]) * kwas_min
       )
       prob += (
           lpSum([
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
               for _, row in df.iterrows()
           ])
-          <= docelowa_ilosc * kwas_max
+          <= lpSum([v_vars[t] for t in v_vars]) * kwas_max
       )
 
       # Bilans Barwy
@@ -184,14 +188,14 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
               for _, row in df.iterrows()
           ])
-          >= docelowa_ilosc * barwa_min
+          >= lpSum([v_vars[t] for t in v_vars]) * barwa_min
       )
       prob += (
           lpSum([
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
               for _, row in df.iterrows()
           ])
-          <= docelowa_ilosc * barwa_max
+          <= lpSum([v_vars[t] for t in v_vars]) * barwa_max
       )
 
       suma_kwasu = lpSum([
@@ -286,6 +290,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
       return {
           "sklad": pd.DataFrame(wyniki),
+          "tot_mass": round(tot_mass, 1),
           "brix": round(tot_brix / tot_mass, 2),
           "kwas_ma": (
               round(tot_kwas_ma / tot_mass, 2)
@@ -333,7 +338,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
         if res:
           st.success(f"{opisy} | Użyte tanki: {res['uzyte_tanki']}")
           col1, col2, col3, col4 = st.columns(4)
-          col1.metric("Łączna masa", f"{docelowa_ilosc:.0f} KG")
+          col1.metric("Łączna masa", f"{res['tot_mass']:.1f} KG")
           col2.metric("Wynikowy Brix", f"{res['brix']} °Bx")
 
           kwas_val = (
