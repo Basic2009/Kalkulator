@@ -1,6 +1,6 @@
 import io
 import pandas as pd
-from pulp import PULP_CBC_CMD, LpMinimize, LpProblem, LpStatus, lpSum, LpVariable
+from pulp import PULP_CBC_CMD, LpInteger, LpMinimize, LpProblem, LpStatus, lpSum, LpVariable
 import requests
 import streamlit as st
 
@@ -12,17 +12,20 @@ st.markdown("---")
 # Link do pliku
 gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 
+# Krok inkrementu
+STEP_KG = 500.0
+
 # Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe Blend do uzyskania")
 
 docelowa_ilosc = st.sidebar.number_input(
-    "Docelowa ilość [KG]", value=100000.0, step=100.0
+    "Docelowa ilość [KG]", value=100000.0, step=STEP_KG
 )
 docelowy_brix = st.sidebar.number_input(
     "Sztywny / Min Brix [°Bx]", value=70.0, step=0.1
 )
 
-# NOWY PARAMETR: Ograniczenie liczby użytych tanków
+# Ograniczenie liczby użytych tanków
 max_uzytych_tankow = st.sidebar.number_input(
     "Maksymalna liczba zbiorników", value=5, min_value=1, max_value=40, step=1
 )
@@ -115,19 +118,30 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
     def licz_blend(podejscie):
       prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
-      v_vars = {}
-      y_vars = {}
+      n_vars = {} # Liczba porcji po 500 kg
+      v_vars = {} # Łączna masa = n * 500 kg
+      y_vars = {} # Flaga użycia zbiornika (0 lub 1)
+
       for idx, row in df.iterrows():
         t_id = str(row["Zbiornik"]).strip()
         max_kg = float(row["Dostępne_Netto"])
-        v_vars[t_id] = LpVariable(f"v_{idx}", 0, max_kg)
+        
+        # Maksymalna liczba porcji po 500 kg, jaka mieści się w zbiorniku
+        max_steps = int(max_kg // STEP_KG)
+        
+        n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
         y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
-        prob += v_vars[t_id] <= max_kg * y_vars[t_id]
+        
+        # Masa wyrażona jako kroki po 500 kg
+        v_vars[t_id] = n_vars[t_id] * STEP_KG
+        
+        # Powiązanie pobrania z flagą aktywności zbiornika
+        prob += n_vars[t_id] <= max_steps * y_vars[t_id]
 
       # Bilans masy całkowitej
       prob += lpSum([v_vars[t] for t in v_vars]) == docelowa_ilosc
 
-      # NOWE OGRANICZENIE: Limit liczby użytych tanków (z wyłączeniem dodawanej wody)
+      # Limit liczby użytych tanków (z wyłączeniem wody)
       prob += (
           lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
           <= max_uzytych_tankow
@@ -216,9 +230,9 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
       for _, row in df.iterrows():
         t = str(row["Zbiornik"]).strip()
-        val = v_vars[t].varValue
+        val = v_vars[t].value()
         if val and val > 0.1:
-          pobrano = round(val, 1)
+          pobrano = int(round(val))
           stan_aktualny = float(row["Ilość (KG)"])
           zablokowane = float(row["Zablokowana Ilość"])
           dostepne = float(row["Dostępne_Netto"])
@@ -335,7 +349,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
 
           st.dataframe(res["sklad"], use_container_width=True)
         else:
-          st.error(f"Brak możliwości ułożenia blendu w podanych zakresach. Zwiększ limit zbiorników (obecny: {max_uzytych_tankow}) lub poszerz zakresy kwasowości/barwy.")
+          st.error(f"Brak możliwości ułożenia blendu z porcjami po 500 kg. Zwiększ limit zbiorników (obecny: {max_uzytych_tankow}) lub poszerz zakresy kwasowości/barwy.")
 
   except Exception as e:
     st.error(f"Błąd przetwarzania: {e}")
