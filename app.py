@@ -200,7 +200,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
         val = v_vars[t].varValue
         if val and val > 0.1:
           pobrano = round(val, 1)
-          stan_przed = float(row["Ilość (KG)"])
+          stan_aktualny = float(row["Ilość (KG)"])
           zablokowane = float(row["Zablokowana Ilość"])
           dostepne = float(row["Dostępne_Netto"])
 
@@ -210,7 +210,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
           wyniki.append({
               "Zbiornik": t,
               "Pobrano [KG]": pobrano,
-              "Stan Przed [KG]": "—" if is_woda else stan_przed,
+              "Stan Aktualny [KG]": "—" if is_woda else stan_aktualny,
               "Zablokowane [KG]": "—" if is_woda else zablokowane,
               "Dostępne [KG]": "—" if is_woda else dostepne,
               "Pozostanie [KG]": "—" if is_woda else pozostanie,
