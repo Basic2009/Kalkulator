@@ -4,7 +4,7 @@ from pulp import PULP_CBC_CMD, LpInteger, LpMinimize, LpProblem, LpStatus, lpSum
 import requests
 import streamlit as st
 
-st.set_page_config(page_title="Kalkulator Blendowania TW", layout="wide")
+st.set_page_config(page_title="Kalkulator Blendów", layout="wide")
 
 st.title("🍹 Kalkulator Blendów")
 st.markdown("---")
@@ -12,20 +12,20 @@ st.markdown("---")
 gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 
 # Krok inkrementu dla zbiorników (kg)
-STEP_KG = 200.0
+STEP_KG = 100.0
 
-st.sidebar.header("⚙️ Parametry Docelowe Blend do uzyskania")
+st.sidebar.header("⚙️ Parametry Docelowe")
 
 # Docelowa masa dotyczy wyłącznie surowców (koncentratów)
 docelowa_ilosc_koncentratu = st.sidebar.number_input(
-    "Docelowa ilość KONCENTRATU [KG]", value=100000.0, step=STEP_KG
+    "Docelowa ilość [KG]", value=100000.0, step=STEP_KG
 )
 docelowy_brix = st.sidebar.number_input(
-    "Sztywny / Min Brix [°Bx]", value=70.0, step=0.1
+    "Min. Brix [°Bx]", value=70.0, step=0.1
 )
 
 max_uzytych_tankow = st.sidebar.number_input(
-    "Maksymalna liczba zbiorników", value=5, min_value=1, max_value=40, step=1
+    "Maksymalna liczba zbiorników", value=3, min_value=1, max_value=40, step=1
 )
 
 st.sidebar.subheader("Kwasowość")
@@ -65,7 +65,7 @@ def pobierz_dane(file_id):
   return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
 
 
-if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
+if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
   try:
     df = pobierz_dane(gdrive_id)
     df.columns = df.columns.str.strip()
@@ -217,7 +217,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
       elif podejscie == "min_barwa":
         prob += suma_barwy * 1000 + uzyte_tanki * 10
       elif podejscie == "min_oba":
-        prob += suma_kwasu * 1000 + suma_barwy * 1000 + uzyte_tanki * 10
+        prob += suma_kwasu * 10000 + suma_barwy * 1000 + uzyte_tanki * 10
 
       prob.solve(PULP_CBC_CMD(msg=0))
       if LpStatus[prob.status] != "Optimal":
@@ -322,7 +322,7 @@ if st.sidebar.button("🚀 OBLICZ RECEPTURY", type="primary"):
     tab1, tab2, tab3 = st.tabs([
         "📉 1. Najniższa Kwasowość",
         "🎨 2. Najniższa Barwa",
-        "⚖️ 3. Hybryda (Min Kwas + Barwa)",
+        "⚖️ 3. Najniższa Kwasowość + Barwa",
     ])
 
     warianty_map = {
