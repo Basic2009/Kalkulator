@@ -14,7 +14,34 @@ gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
 # Krok inkrementu dla zbiorników (kg)
 STEP_KG = 100.0
 
+
+@st.cache_data(ttl=60)
+def pobierz_dane(file_id):
+  url = f"https://drive.google.com/uc?export=download&id={file_id}"
+  response = requests.get(url)
+  response.raise_for_status()
+  return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
+
+
+# Pobieramy wstępnie dane, aby odczytać listę zbiorników do multiselecta
+try:
+  df_raw = pobierz_dane(gdrive_id)
+  df_raw.columns = df_raw.columns.str.strip()
+  wszystkie_zbiorniki = (
+      df_raw["Zbiornik"].dropna().astype(str).str.strip().unique().tolist()
+  )
+except Exception:
+  wszystkie_zbiorniki = []
+
+# Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe")
+
+# Wybór dopuszczonych zbiorników (domyślnie zaznaczone wszystkie)
+wybrane_zbiorniki = st.sidebar.multiselect(
+    "Dopuszczone zbiorniki do blendu",
+    options=wszystkie_zbiorniki,
+    default=wszystkie_zbiorniki,
+)
 
 # Docelowa masa dotyczy wyłącznie surowców (koncentratów)
 docelowa_ilosc_koncentratu = st.sidebar.number_input(
@@ -56,15 +83,6 @@ pozwol_na_wode = st.sidebar.checkbox(
     "Zbijanie Brixa wodą", value=True
 )
 
-
-@st.cache_data(ttl=60)
-def pobierz_dane(file_id):
-  url = f"https://drive.google.com/uc?export=download&id={file_id}"
-  response = requests.get(url)
-  response.raise_for_status()
-  return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
-
-
 if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
   try:
     df = pobierz_dane(gdrive_id)
@@ -90,11 +108,15 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     if "Zablokowana Ilość" not in df.columns:
       df["Zablokowana Ilość"] = 0.0
 
+    df["Zbiornik"] = df["Zbiornik"].astype(str).str.strip()
     df["Dostępne_Netto"] = (
         df["Ilość (KG)"] - df["Zablokowana Ilość"]
     ).clip(lower=0)
     df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
     df = df[df["Dostępne_Netto"] > 0]
+
+    # FILTRACJA ZBIORNIKÓW ZGODNIE Z SELEKCJĄ W MULTISELECT
+    df = df[df["Zbiornik"].isin(wybrane_zbiorniki)]
 
     if "Barwa (T)" in df.columns and df["Barwa (T)"].max() <= 1.0:
       df["Barwa (T)"] = df["Barwa (T)"] * 100
@@ -147,11 +169,9 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
       )
 
       # LOGIKA BRIXA:
-      # Masa całkowita = Masa koncentratów + Masa wody
       masa_calkowita = lpSum([v_vars[t] for t in v_vars])
 
       if pozwol_na_wode:
-        # Woda dociąga wypadkowy Brix do docelowego
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
@@ -160,7 +180,6 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
             == masa_calkowita * docelowy_brix
         )
       else:
-        # Bez wody - Brix samych koncentratów musi być przynajmniej równy docelowemu
         prob += (
             lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
@@ -169,7 +188,7 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
             >= docelowa_ilosc_koncentratu * docelowy_brix
         )
 
-      # Bilans Kwasowości i Barwy odniesiony do MASY CAŁKOWITEJ (koncentraty + woda)
+      # Bilans Kwasowości i Barwy odniesiony do MASY CAŁKOWITEJ
       prob += (
           lpSum([
               v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
@@ -359,7 +378,7 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
 
           st.dataframe(res["sklad"], use_container_width=True)
         else:
-          st.error(f"Brak możliwości ułożenia blendu z porcjami po {int(STEP_KG)} kg. Zwiększ limit zbiorników (obecny: {max_uzytych_tankow}) lub poszerz zakresy kwasowości/barwy.")
+          st.error(f"Brak możliwości ułożenia blendu w podanych zakresach. Sprawdź wybrane zbiorniki lub poszerz parametry.")
 
   except Exception as e:
     st.error(f"Błąd przetwarzania: {e}")
