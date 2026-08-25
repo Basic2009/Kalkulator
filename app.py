@@ -45,20 +45,20 @@ df_selekcja_init = pd.DataFrame({
     "Dostępny": domyslne_zaznaczenie
 })
 
-st.sidebar.subheader("📋 Dostępność zbiorników")
-# Interaktywna tabela z ptaszkami (checkboxy)
-df_selekcja = st.sidebar.data_editor(
-    df_selekcja_init,
-    column_config={
-        "Dostępny": st.column_config.CheckboxColumn(
-            "Użyj",
-            default=False,
-        ),
-        "Zbiornik": st.column_config.TextColumn("Zbiornik", disabled=True),
-    },
-    disabled=["Zbiornik"],
-    hide_index=True,
-)
+# ZWIJANA SEKCJA (st.sidebar.expander):
+with st.sidebar.expander("📋 Wybór dostępnych zbiorników", expanded=False):
+  df_selekcja = st.data_editor(
+      df_selekcja_init,
+      column_config={
+          "Dostępny": st.column_config.CheckboxColumn(
+              "Użyj",
+              default=False,
+          ),
+          "Zbiornik": st.column_config.TextColumn("Zbiornik", disabled=True),
+      },
+      disabled=["Zbiornik"],
+      hide_index=True,
+  )
 
 # Filtrujemy listę tylko do tych z zaznaczonym ptaszkiem
 wybrane_zbiorniki = df_selekcja[df_selekcja["Dostępny"] == True]["Zbiornik"].tolist()
@@ -135,7 +135,7 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
     df = df[df["Dostępne_Netto"] > 0]
 
-    # FILTRACJA ZBIORNIKÓW ZGODNIE Z SELEKCJĄ Z TABELI Z CHECKBOXAMI
+    # FILTRACJA ZBIORNIKÓW ZGODNIE Z SELEKCJĄ Z ZWIJANEJ TABELI
     df = df[df["Zbiornik"].isin(wybrane_zbiorniki)]
 
     if "Barwa (T)" in df.columns and df["Barwa (T)"].max() <= 1.0:
