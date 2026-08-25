@@ -36,10 +36,13 @@ except Exception:
 # Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe")
 
+# Domyślne zaznaczenie: True tylko dla zbiorników zaczynających się od "TZH-"
+domyslne_zaznaczenie = [z.startswith("TZH-") for z in lista_zbiornikow]
+
 # Tworzymy DataFrame dla tabelki z checkboxami
 df_selekcja_init = pd.DataFrame({
     "Zbiornik": lista_zbiornikow,
-    "Dostępny": [True] * len(lista_zbiornikow)  # Domyślnie wszystkie zaznaczone
+    "Dostępny": domyslne_zaznaczenie
 })
 
 st.sidebar.subheader("📋 Dostępność zbiorników")
@@ -49,7 +52,7 @@ df_selekcja = st.sidebar.data_editor(
     column_config={
         "Dostępny": st.column_config.CheckboxColumn(
             "Użyj",
-            default=True,
+            default=False,
         ),
         "Zbiornik": st.column_config.TextColumn("Zbiornik", disabled=True),
     },
