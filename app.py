@@ -6,7 +6,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Kalkulator Blendów", layout="wide")
 
-st.title("🍹 Kalkulator Blendów")
+st.title("🍎 Kalkulator Blendów 🍒")
 st.markdown("---")
 
 gdrive_id = "1t6ssjST2jEFoFRvM5OIMgebzV7HMYwJv"
@@ -85,18 +85,18 @@ kwas_max = col_k2.number_input("Kwas MAX", value=2.4, step=0.01)
 
 st.sidebar.subheader("Barwa")
 barwa_jednostka = st.sidebar.radio(
-    "Jednostka Barwy", ["T", "A"], horizontal=True
+    "Jednostka Barwy", ["Trans", "Abs"], horizontal=True
 )
 col_b1, col_b2 = st.sidebar.columns(2)
 barwa_min = col_b1.number_input(
     "Barwa MIN",
-    value=40.0 if barwa_jednostka == "T" else 0.40,
-    step=0.5 if barwa_jednostka == "T" else 0.01,
+    value=40.0 if barwa_jednostka == "Trans" else 0.40,
+    step=0.5 if barwa_jednostka == "Trans" else 0.01,
 )
 barwa_max = col_b2.number_input(
     "Barwa MAX",
-    value=50.0 if barwa_jednostka == "T" else 0.50,
-    step=0.5 if barwa_jednostka == "T" else 0.01,
+    value=50.0 if barwa_jednostka == "Trans" else 0.50,
+    step=0.5 if barwa_jednostka == "Trans" else 0.01,
 )
 
 pozwol_na_wode = st.sidebar.checkbox(
@@ -117,8 +117,8 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
         "Brix",
         "Kwasowość (MA)",
         "Kwasowość (CA)",
-        "Barwa (T)",
-        "Barwa (A)",
+        "Barwa (Trans)",
+        "Barwa (Abs)",
     ]
     for col in kolumny_numeryczne:
       if col in df.columns:
@@ -138,8 +138,8 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     # FILTRACJA ZBIORNIKÓW ZGODNIE Z SELEKCJĄ Z ZWIJANEJ TABELI
     df = df[df["Zbiornik"].isin(wybrane_zbiorniki)]
 
-    if "Barwa (T)" in df.columns and df["Barwa (T)"].max() <= 1.0:
-      df["Barwa (T)"] = df["Barwa (T)"] * 100
+    if "Barwa (Trans)" in df.columns and df["Barwa (Trans)"].max() <= 1.0:
+      df["Barwa (Trans)"] = df["Barwa (Trans)"] * 100
 
     if pozwol_na_wode:
       woda_df = pd.DataFrame([{
@@ -150,8 +150,8 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
           "Brix": 0.0,
           "Kwasowość (MA)": 0.0,
           "Kwasowość (CA)": 0.0,
-          "Barwa (T)": 100.0,
-          "Barwa (A)": 0.0,
+          "Barwa (Trans)": 100.0,
+          "Barwa (Abs)": 0.0,
       }])
       df = pd.concat([df, woda_df], ignore_index=True)
 
@@ -267,8 +267,8 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
       tot_brix = 0
       tot_kwas_ma = 0
       tot_kwas_ca = 0
-      tot_barwa_t = 0
-      tot_barwa_a = 0
+      tot_barwa_trans = 0
+      tot_barwa_abs = 0
 
       for _, row in df.iterrows():
         t = str(row["Zbiornik"]).strip()
@@ -306,14 +306,14 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
                   if "Kwasowość (CA)" in df.columns
                   else None
               ),
-              "Barwa T [%]": (
-                  float(row["Barwa (T)"])
-                  if "Barwa (T)" in df.columns
+              "Barwa Trans [%]": (
+                  float(row["Barwa (Trans)"])
+                  if "Barwa (Trans)" in df.columns
                   else None
               ),
-              "Barwa A": (
-                  float(row["Barwa (A)"])
-                  if "Barwa (A)" in df.columns
+              "Barwa Abs": (
+                  float(row["Barwa (Abs)"])
+                  if "Barwa (Abs)" in df.columns
                   else None
               ),
           })
@@ -324,10 +324,10 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
             tot_kwas_ma += val * float(row["Kwasowość (MA)"])
           if "Kwasowość (CA)" in df.columns:
             tot_kwas_ca += val * float(row["Kwasowość (CA)"])
-          if "Barwa (T)" in df.columns:
-            tot_barwa_t += val * float(row["Barwa (T)"])
-          if "Barwa (A)" in df.columns:
-            tot_barwa_a += val * float(row["Barwa (A)"])
+          if "Barwa (Trans)" in df.columns:
+            tot_barwa_trans += val * float(row["Barwa (Trans)"])
+          if "Barwa (Abs)" in df.columns:
+            tot_barwa_abs += val * float(row["Barwa (Abs)"])
 
       return {
           "sklad": pd.DataFrame(wyniki),
@@ -343,14 +343,14 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
               if "Kwasowość (CA)" in df.columns
               else None
           ),
-          "barwa_t": (
-              round(tot_barwa_t / tot_mass, 2)
-              if "Barwa (T)" in df.columns
+          "barwa_trans": (
+              round(tot_barwa_trans / tot_mass, 2)
+              if "Barwa (Trans)" in df.columns
               else None
           ),
-          "barwa_a": (
-              round(tot_barwa_a / tot_mass, 3)
-              if "Barwa (A)" in df.columns
+          "barwa_abs": (
+              round(tot_barwa_abs / tot_mass, 3)
+              if "Barwa (Abs)" in df.columns
               else None
           ),
           "uzyte_tanki": len(
@@ -390,9 +390,9 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
           col3.metric("Wynikowa Kwasowość", kwas_val)
 
           barwa_val = (
-              f"{res['barwa_t']}% T"
-              if barwa_jednostka == "T"
-              else f"{res['barwa_a']} A"
+              f"{res['barwa_trans']}% Trans"
+              if barwa_jednostka == "Trans"
+              else f"{res['barwa_abs']} Abs"
           )
           col4.metric("Wynikowa Barwa", barwa_val)
 
