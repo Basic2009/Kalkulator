@@ -17,53 +17,43 @@ STEP_KG = 100.0
 
 @st.cache_data(ttl=60)
 def pobierz_dane(file_id):
-  url = f"https://drive.google.com/uc?export=download&id={file_id}"
-  response = requests.get(url)
-  response.raise_for_status()
-  return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    response = requests.get(url)
+    response.raise_for_status()
+    return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
 
 
-# Pobieramy wstępnie dane do tabeli wyboru zbiorników
 try:
-  df_raw = pobierz_dane(gdrive_id)
-  df_raw.columns = df_raw.columns.str.strip()
-  lista_zbiornikow = (
-      df_raw["Zbiornik"].dropna().astype(str).str.strip().unique().tolist()
-  )
+    df_raw = pobierz_dane(gdrive_id)
+    df_raw.columns = df_raw.columns.str.strip()
+    lista_zbiornikow = (
+        df_raw["Zbiornik"].dropna().astype(str).str.strip().unique().tolist()
+    )
 except Exception:
-  lista_zbiornikow = []
+    lista_zbiornikow = []
 
-# Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe")
 
-# Domyślne zaznaczenie: True tylko dla zbiorników zaczynających się od "TZH-"
 domyslne_zaznaczenie = [z.startswith("TZH-") for z in lista_zbiornikow]
 
-# Tworzymy DataFrame dla tabelki z checkboxami
 df_selekcja_init = pd.DataFrame({
     "Zbiornik": lista_zbiornikow,
     "Dostępny": domyslne_zaznaczenie
 })
 
-# ZWIJANA SEKCJA (st.sidebar.expander):
 with st.sidebar.expander("📋 Wybór dostępnych zbiorników", expanded=False):
-  df_selekcja = st.data_editor(
-      df_selekcja_init,
-      column_config={
-          "Dostępny": st.column_config.CheckboxColumn(
-              "Użyj",
-              default=False,
-          ),
-          "Zbiornik": st.column_config.TextColumn("Zbiornik", disabled=True),
-      },
-      disabled=["Zbiornik"],
-      hide_index=True,
-  )
+    df_selekcja = st.data_editor(
+        df_selekcja_init,
+        column_config={
+            "Dostępny": st.column_config.CheckboxColumn("Użyj", default=False),
+            "Zbiornik": st.column_config.TextColumn("Zbiornik", disabled=True),
+        },
+        disabled=["Zbiornik"],
+        hide_index=True,
+    )
 
-# Filtrujemy listę tylko do tych z zaznaczonym ptaszkiem
 wybrane_zbiorniki = df_selekcja[df_selekcja["Dostępny"] == True]["Zbiornik"].tolist()
 
-# Docelowa masa dotyczy wyłącznie surowców (koncentratów)
 docelowa_ilosc_koncentratu = st.sidebar.number_input(
     "Docelowa ilość [KG]", value=100000.0, step=STEP_KG
 )
@@ -77,7 +67,7 @@ max_uzytych_tankow = st.sidebar.number_input(
 
 st.sidebar.subheader("Kwasowość")
 kwas_jednostka = st.sidebar.radio(
-    "Jednostka Kwasowości", ["CA", "MA"], horizontal=True
+    "Jednostka Kwasowości", ["MA", "CA"], horizontal=True
 )
 col_k1, col_k2 = st.sidebar.columns(2)
 kwas_min = col_k1.number_input("Kwas MIN", value=2.2, step=0.01)
@@ -104,301 +94,264 @@ pozwol_na_wode = st.sidebar.checkbox(
 )
 
 if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
-  try:
-    df = pobierz_dane(gdrive_id)
-    df.columns = df.columns.str.strip()
+    st.session_state["obliczono"] = True
 
-    KOLUMNA_KWAS = f"Kwasowość ({kwas_jednostka})"
-    KOLUMNA_BARWA = f"Barwa ({barwa_jednostka})"
+if st.session_state.get("obliczono", False):
+    try:
+        df = pobierz_dane(gdrive_id)
+        df.columns = df.columns.str.strip()
 
-    kolumny_numeryczne = [
-        "Ilość (KG)",
-        "Zablokowana Ilość",
-        "Brix",
-        "Kwasowość (MA)",
-        "Kwasowość (CA)",
-        "Barwa (Trans)",
-        "Barwa (Abs)",
-    ]
-    for col in kolumny_numeryczne:
-      if col in df.columns:
-        df[col] = df[col].astype(str).str.replace(",", ".").str.strip()
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        KOLUMNA_KWAS = f"Kwasowość ({kwas_jednostka})"
+        KOLUMNA_BARWA = f"Barwa ({barwa_jednostka})"
 
-    if "Zablokowana Ilość" not in df.columns:
-      df["Zablokowana Ilość"] = 0.0
+        kolumny_numeryczne = [
+            "Ilość (KG)",
+            "Zablokowana Ilość",
+            "Brix",
+            "Kwasowość (MA)",
+            "Kwasowość (CA)",
+            "Barwa (Trans)",
+            "Barwa (Abs)",
+        ]
+        for col in kolumny_numeryczne:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.replace(",", ".").str.strip()
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    df["Zbiornik"] = df["Zbiornik"].astype(str).str.strip()
-    df["Dostępne_Netto"] = (
-        df["Ilość (KG)"] - df["Zablokowana Ilość"]
-    ).clip(lower=0)
-    df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
-    df = df[df["Dostępne_Netto"] > 0]
+        if "Zablokowana Ilość" not in df.columns:
+            df["Zablokowana Ilość"] = 0.0
 
-    # FILTRACJA ZBIORNIKÓW ZGODNIE Z SELEKCJĄ Z ZWIJANEJ TABELI
-    df = df[df["Zbiornik"].isin(wybrane_zbiorniki)]
-
-    if "Barwa (Trans)" in df.columns and df["Barwa (Trans)"].max() <= 1.0:
-      df["Barwa (Trans)"] = df["Barwa (Trans)"] * 100
-
-    if pozwol_na_wode:
-      woda_df = pd.DataFrame([{
-          "Zbiornik": "WODA (Dodatek)",
-          "Ilość (KG)": 999999.0,
-          "Zablokowana Ilość": 0.0,
-          "Dostępne_Netto": 999999.0,
-          "Brix": 0.0,
-          "Kwasowość (MA)": 0.0,
-          "Kwasowość (CA)": 0.0,
-          "Barwa (Trans)": 100.0,
-          "Barwa (Abs)": 0.0,
-      }])
-      df = pd.concat([df, woda_df], ignore_index=True)
-
-    def licz_blend(podejscie):
-      prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
-      v_vars = {} 
-      y_vars = {} 
-      n_vars = {}
-
-      for idx, row in df.iterrows():
-        t_id = str(row["Zbiornik"]).strip()
-        max_kg = float(row["Dostępne_Netto"])
+        df["Zbiornik"] = df["Zbiornik"].astype(str).str.strip()
+        df["Dostępne_Netto"] = (
+            df["Ilość (KG)"] - df["Zablokowana Ilość"]
+        ).clip(lower=0)
+        df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
         
-        y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
+        if "Barwa (Trans)" in df.columns and df["Barwa (Trans)"].max() <= 1.0:
+            df["Barwa (Trans)"] = df["Barwa (Trans)"] * 100
 
-        if t_id == "WODA (Dodatek)":
-          v_vars[t_id] = LpVariable(f"v_woda_{idx}", 0, max_kg)
-          prob += v_vars[t_id] <= max_kg * y_vars[t_id]
-        else:
-          max_steps = int(max_kg // STEP_KG)
-          n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
-          v_vars[t_id] = n_vars[t_id] * STEP_KG
-          prob += n_vars[t_id] <= max_steps * y_vars[t_id]
+        df_calc = df[(df["Dostępne_Netto"] > 0) & (df["Zbiornik"].isin(wybrane_zbiorniki))].copy()
 
-      # SZTYWNY BILANS MASY SAMYCH KONCENTRATÓW:
-      prob += (
-          lpSum([v_vars[t] for t in v_vars if t != "WODA (Dodatek)"])
-          == docelowa_ilosc_koncentratu
-      )
+        if pozwol_na_wode:
+            woda_df = pd.DataFrame([{
+                "Zbiornik": "WODA (Dodatek)",
+                "Ilość (KG)": 999999.0,
+                "Zablokowana Ilość": 0.0,
+                "Dostępne_Netto": 999999.0,
+                "Brix": 0.0,
+                "Kwasowość (MA)": 0.0,
+                "Kwasowość (CA)": 0.0,
+                "Barwa (Trans)": 100.0,
+                "Barwa (Abs)": 0.0,
+            }])
+            df_calc = pd.concat([df_calc, woda_df], ignore_index=True)
 
-      # Limit liczby użytych tanków (bez wody)
-      prob += (
-          lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
-          <= max_uzytych_tankow
-      )
+        def licz_blend(podejscie):
+            prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
+            v_vars, y_vars, n_vars = {}, {}, {}
 
-      # LOGIKA BRIXA:
-      masa_calkowita = lpSum([v_vars[t] for t in v_vars])
+            for idx, row in df_calc.iterrows():
+                t_id = str(row["Zbiornik"]).strip()
+                max_kg = float(row["Dostępne_Netto"])
 
-      if pozwol_na_wode:
-        prob += (
-            lpSum([
-                v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
-                for _, row in df.iterrows()
+                y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
+
+                if t_id == "WODA (Dodatek)":
+                    v_vars[t_id] = LpVariable(f"v_woda_{idx}", 0, max_kg)
+                    prob += v_vars[t_id] <= max_kg * y_vars[t_id]
+                else:
+                    max_steps = int(max_kg // STEP_KG)
+                    n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
+                    v_vars[t_id] = n_vars[t_id] * STEP_KG
+                    prob += n_vars[t_id] <= max_steps * y_vars[t_id]
+
+            prob += (
+                lpSum([v_vars[t] for t in v_vars if t != "WODA (Dodatek)"])
+                == docelowa_ilosc_koncentratu
+            )
+
+            prob += (
+                lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
+                <= max_uzytych_tankow
+            )
+
+            masa_calkowita = lpSum([v_vars[t] for t in v_vars])
+
+            if pozwol_na_wode:
+                prob += (
+                    lpSum([
+                        v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
+                        for _, row in df_calc.iterrows()
+                    ])
+                    == masa_calkowita * docelowy_brix
+                )
+            else:
+                prob += (
+                    lpSum([
+                        v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
+                        for _, row in df_calc.iterrows()
+                    ])
+                    >= docelowa_ilosc_koncentratu * docelowy_brix
+                )
+
+            prob += (
+                lpSum([
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
+                    for _, row in df_calc.iterrows()
+                ])
+                >= masa_calkowita * kwas_min
+            )
+            prob += (
+                lpSum([
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
+                    for _, row in df_calc.iterrows()
+                ])
+                <= masa_calkowita * kwas_max
+            )
+
+            prob += (
+                lpSum([
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
+                    for _, row in df_calc.iterrows()
+                ])
+                >= masa_calkowita * barwa_min
+            )
+            prob += (
+                lpSum([
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
+                    for _, row in df_calc.iterrows()
+                ])
+                <= masa_calkowita * barwa_max
+            )
+
+            suma_kwasu = lpSum([
+                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
+                for _, row in df_calc.iterrows()
             ])
-            == masa_calkowita * docelowy_brix
-        )
-      else:
-        prob += (
-            lpSum([
-                v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
-                for _, row in df.iterrows()
+            suma_barwy = lpSum([
+                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
+                for _, row in df_calc.iterrows()
             ])
-            >= docelowa_ilosc_koncentratu * docelowy_brix
-        )
 
-      # Bilans Kwasowości i Barwy odniesiony do MASY CAŁKOWITEJ
-      prob += (
-          lpSum([
-              v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-              for _, row in df.iterrows()
-          ])
-          >= masa_calkowita * kwas_min
-      )
-      prob += (
-          lpSum([
-              v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-              for _, row in df.iterrows()
-          ])
-          <= masa_calkowita * kwas_max
-      )
+            kwas_ref = (kwas_min + kwas_max) / 2.0 if kwas_max > 0 else 1.0
+            barwa_ref = (barwa_min + barwa_max) / 2.0 if barwa_max > 0 else 1.0
 
-      prob += (
-          lpSum([
-              v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-              for _, row in df.iterrows()
-          ])
-          >= masa_calkowita * barwa_min
-      )
-      prob += (
-          lpSum([
-              v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-              for _, row in df.iterrows()
-          ])
-          <= masa_calkowita * barwa_max
-      )
+            norm_kwas = suma_kwasu / kwas_ref
 
-      suma_kwasu = lpSum([
-          v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-          for _, row in df.iterrows()
-      ])
-      suma_barwy = lpSum([
-          v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-          for _, row in df.iterrows()
-      ])
-      uzyte_tanki = lpSum(
-          [y_vars[t] for t in y_vars if t != "WODA (Dodatek)"]
-      )
+            if barwa_jednostka == "Trans":
+                norm_barwa = suma_barwy / barwa_ref
+            else:
+                norm_barwa = (docelowa_ilosc_koncentratu * barwa_max - suma_barwy) / barwa_ref
 
-      if podejscie == "min_kwas":
-        prob += suma_kwasu * 1000 + uzyte_tanki * 10
-      elif podejscie == "min_barwa":
-        prob += suma_barwy * 1000 + uzyte_tanki * 10
-      elif podejscie == "min_oba":
-        prob += suma_kwasu * 10000 + suma_barwy * 1000 + uzyte_tanki * 10
+            uzyte_tanki = lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
 
-      prob.solve(PULP_CBC_CMD(msg=0))
-      if LpStatus[prob.status] != "Optimal":
-        return None
+            if podejscie == "min_kwas":
+                prob += norm_kwas * 1000 + uzyte_tanki * 10
+            elif podejscie == "min_barwa":
+                prob += norm_barwa * 1000 + uzyte_tanki * 10
+            elif podejscie == "oba_kwas_80_20":
+                prob += norm_kwas * 800 + norm_barwa * 200 + uzyte_tanki * 10
+            elif podejscie == "oba_barwa_20_80":
+                prob += norm_kwas * 200 + norm_barwa * 800 + uzyte_tanki * 10
 
-      wyniki = []
-      tot_mass = 0
-      tot_brix = 0
-      tot_kwas_ma = 0
-      tot_kwas_ca = 0
-      tot_barwa_trans = 0
-      tot_barwa_abs = 0
+            prob.solve(PULP_CBC_CMD(msg=0))
+            if LpStatus[prob.status] != "Optimal":
+                return None
 
-      for _, row in df.iterrows():
-        t = str(row["Zbiornik"]).strip()
-        is_woda = (t == "WODA (Dodatek)")
+            wyniki = []
+            tot_mass = 0
+            tot_brix = 0
+            tot_kwas_ma = 0
+            tot_kwas_ca = 0
+            tot_barwa_trans = 0
+            tot_barwa_abs = 0
 
-        if is_woda:
-          val = v_vars[t].varValue
-        else:
-          val = n_vars[t].varValue * STEP_KG if n_vars[t].varValue is not None else 0.0
+            for _, row in df_calc.iterrows():
+                t = str(row["Zbiornik"]).strip()
+                is_woda = (t == "WODA (Dodatek)")
 
-        if val and val > 0.001:
-          pobrano = round(val, 1) if is_woda else int(round(val))
-          
-          stan_aktualny = float(row["Ilość (KG)"])
-          zablokowane = float(row["Zablokowana Ilość"])
-          dostepne = float(row["Dostępne_Netto"])
+                if is_woda:
+                    val = v_vars[t].varValue
+                else:
+                    val = n_vars[t].varValue * STEP_KG if n_vars[t].varValue is not None else 0.0
 
-          pozostanie = 0.0 if is_woda else round(dostepne - pobrano, 1)
+                if val and val > 0.001:
+                    pobrano = round(val, 1) if is_woda else int(round(val))
+                    stan_aktualny = float(row["Ilość (KG)"])
+                    zablokowane = float(row["Zablokowana Ilość"])
+                    dostepne = float(row["Dostępne_Netto"])
+                    pozostanie = "—" if is_woda else round(dostepne - pobrano, 1)
 
-          wyniki.append({
-              "Zbiornik": t,
-              "Pobrano [KG]": pobrano,
-              "Stan Aktualny [KG]": "—" if is_woda else stan_aktualny,
-              "Zablokowane [KG]": "—" if is_woda else zablokowane,
-              "Dostępne [KG]": "—" if is_woda else dostepne,
-              "Pozostanie [KG]": "—" if is_woda else pozostanie,
-              "Brix [°Bx]": float(row["Brix"]),
-              "Kwas MA": (
-                  float(row["Kwasowość (MA)"])
-                  if "Kwasowość (MA)" in df.columns
-                  else None
-              ),
-              "Kwas CA": (
-                  float(row["Kwasowość (CA)"])
-                  if "Kwasowość (CA)" in df.columns
-                  else None
-              ),
-              "Barwa Trans [%]": (
-                  float(row["Barwa (Trans)"])
-                  if "Barwa (Trans)" in df.columns
-                  else None
-              ),
-              "Barwa Abs": (
-                  float(row["Barwa (Abs)"])
-                  if "Barwa (Abs)" in df.columns
-                  else None
-              ),
-          })
+                    wyniki.append({
+                        "Zbiornik": t,
+                        "Pobrano [KG]": pobrano,
+                        "Stan Aktualny [KG]": "—" if is_woda else stan_aktualny,
+                        "Zablokowane [KG]": "—" if is_woda else zablokowane,
+                        "Dostępne [KG]": "—" if is_woda else dostepne,
+                        "Pozostanie [KG]": pozostanie,
+                        "Brix [°Bx]": float(row["Brix"]),
+                        "Kwas MA": float(row["Kwasowość (MA)"]) if "Kwasowość (MA)" in df.columns else None,
+                        "Kwas CA": float(row["Kwasowość (CA)"]) if "Kwasowość (CA)" in df.columns else None,
+                        "Barwa Trans [%]": float(row["Barwa (Trans)"]) if "Barwa (Trans)" in df.columns else None,
+                        "Barwa Abs": float(row["Barwa (Abs)"]) if "Barwa (Abs)" in df.columns else None,
+                    })
 
-          tot_mass += val
-          tot_brix += val * float(row["Brix"])
-          if "Kwasowość (MA)" in df.columns:
-            tot_kwas_ma += val * float(row["Kwasowość (MA)"])
-          if "Kwasowość (CA)" in df.columns:
-            tot_kwas_ca += val * float(row["Kwasowość (CA)"])
-          if "Barwa (Trans)" in df.columns:
-            tot_barwa_trans += val * float(row["Barwa (Trans)"])
-          if "Barwa (Abs)" in df.columns:
-            tot_barwa_abs += val * float(row["Barwa (Abs)"])
+                    tot_mass += val
+                    tot_brix += val * float(row["Brix"])
+                    if "Kwasowość (MA)" in df.columns:
+                        tot_kwas_ma += val * float(row["Kwasowość (MA)"])
+                    if "Kwasowość (CA)" in df.columns:
+                        tot_kwas_ca += val * float(row["Kwasowość (CA)"])
+                    if "Barwa (Trans)" in df.columns:
+                        tot_barwa_trans += val * float(row["Barwa (Trans)"])
+                    if "Barwa (Abs)" in df.columns:
+                        tot_barwa_abs += val * float(row["Barwa (Abs)"])
 
-      return {
-          "sklad": pd.DataFrame(wyniki),
-          "tot_mass": round(tot_mass, 1),
-          "brix": round(tot_brix / tot_mass, 2),
-          "kwas_ma": (
-              round(tot_kwas_ma / tot_mass, 2)
-              if "Kwasowość (MA)" in df.columns
-              else None
-          ),
-          "kwas_ca": (
-              round(tot_kwas_ca / tot_mass, 2)
-              if "Kwasowość (CA)" in df.columns
-              else None
-          ),
-          "barwa_trans": (
-              round(tot_barwa_trans / tot_mass, 2)
-              if "Barwa (Trans)" in df.columns
-              else None
-          ),
-          "barwa_abs": (
-              round(tot_barwa_abs / tot_mass, 3)
-              if "Barwa (Abs)" in df.columns
-              else None
-          ),
-          "uzyte_tanki": len(
-              [x for x in wyniki if x["Zbiornik"] != "WODA (Dodatek)"]
-          ),
-      }
+            return {
+                "sklad": pd.DataFrame(wyniki),
+                "tot_mass": round(tot_mass, 1),
+                "brix": round(tot_brix / tot_mass, 2),
+                "kwas_ma": round(tot_kwas_ma / tot_mass, 2) if "Kwasowość (MA)" in df.columns else None,
+                "kwas_ca": round(tot_kwas_ca / tot_mass, 2) if "Kwasowość (CA)" in df.columns else None,
+                "barwa_trans": round(tot_barwa_trans / tot_mass, 2) if "Barwa (Trans)" in df.columns else None,
+                "barwa_abs": round(tot_barwa_abs / tot_mass, 3) if "Barwa (Abs)" in df.columns else None,
+                "uzyte_tanki": len([x for x in wyniki if x["Zbiornik"] != "WODA (Dodatek)"]),
+            }
 
-    tab1, tab2, tab3 = st.tabs([
-        "📉 1. Najniższa Kwasowość",
-        "🎨 2. Najniższa Barwa",
-        "⚖️ 3. Najniższa Kwasowość + Barwa",
-    ])
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📉 1. Najniższy Kwas",
+            "🎨 2. Najniższa Barwa",
+            "⚖️ 3. Kwas > Barwa (80/20)",
+            "🖼️ 4. Barwa > Kwas (20/80)",
+        ])
 
-    warianty_map = {
-        tab1: ("min_kwas", "Wariant z najniższą możliwą kwasowością"),
-        tab2: ("min_barwa", "Wariant z najniższym/najjaśniejszym kolorem"),
-        tab3: (
-            "min_oba",
-            "Wariant ze zrównoważonym najniższym kwasem i barwą",
-        ),
-    }
+        warianty_map = {
+            tab1: ("min_kwas", "Wariant z najniższą możliwą kwasowością"),
+            tab2: ("min_barwa", "Wariant z najniższą możliwą barwą"),
+            tab3: ("oba_kwas_80_20", "Wariant zrównoważony z faworyzacją kwasowości (80/20)"),
+            tab4: ("oba_barwa_20_80", "Wariant zrównoważony z faworyzacją barwy (20/80)"),
+        }
 
-    for tab, (kod, opisy) in warianty_map.items():
-      with tab:
-        res = licz_blend(kod)
-        if res:
-          st.success(f"{opisy} | Użyte tanki: {res['uzyte_tanki']}")
-          col1, col2, col3, col4 = st.columns(4)
-          col1.metric("Masa Całkowita (z wodą)", f"{res['tot_mass']:.1f} KG")
-          col2.metric("Wynikowy Brix", f"{res['brix']} °Bx")
+        for tab, (kod, opisy) in warianty_map.items():
+            with tab:
+                res = licz_blend(kod)
+                if res:
+                    st.success(f"{opisy} | Użyte tanki: {res['uzyte_tanki']}")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    col1.metric("Masa Całkowita (z wodą)", f"{res['tot_mass']:.1f} KG")
+                    col2.metric("Wynikowy Brix", f"{res['brix']} °Bx")
 
-          kwas_val = (
-              f"{res['kwas_ca']} CA"
-              if kwas_jednostka == "CA"
-              else f"{res['kwas_ma']} MA"
-          )
-          col3.metric("Wynikowa Kwasowość", kwas_val)
+                    kwas_val = f"{res['kwas_ca']} CA" if kwas_jednostka == "CA" else f"{res['kwas_ma']} MA"
+                    col3.metric("Wynikowa Kwasowość", kwas_val)
 
-          barwa_val = (
-              f"{res['barwa_trans']}% Trans"
-              if barwa_jednostka == "Trans"
-              else f"{res['barwa_abs']} Abs"
-          )
-          col4.metric("Wynikowa Barwa", barwa_val)
+                    barwa_val = f"{res['barwa_trans']}% Trans" if barwa_jednostka == "Trans" else f"{res['barwa_abs']} Abs"
+                    col4.metric("Wynikowa Barwa", barwa_val)
 
-          st.dataframe(res["sklad"], use_container_width=True)
-        else:
-          st.error(f"Brak możliwości ułożenia blendu w podanych zakresach. Sprawdź zaznaczone zbiorniki lub poszerz parametry.")
+                    st.markdown("---")
+                    st.dataframe(res["sklad"], hide_index=True, use_container_width=True)
+                else:
+                    st.error("Brak możliwości ułożenia blendu w podanych zakresach. Sprawdź zaznaczone zbiorniki lub poszerz parametry.")
 
-  except Exception as e:
-    st.error(f"Błąd przetwarzania: {e}")
+    except Exception as e:
+        st.error(f"Błąd przetwarzania: {e}")
