@@ -23,25 +23,42 @@ def pobierz_dane(file_id):
   return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
 
 
-# Pobieramy wstępnie dane, aby odczytać listę zbiorników do multiselecta
+# Pobieramy wstępnie dane do tabeli wyboru zbiorników
 try:
   df_raw = pobierz_dane(gdrive_id)
   df_raw.columns = df_raw.columns.str.strip()
-  wszystkie_zbiorniki = (
+  lista_zbiornikow = (
       df_raw["Zbiornik"].dropna().astype(str).str.strip().unique().tolist()
   )
 except Exception:
-  wszystkie_zbiorniki = []
+  lista_zbiornikow = []
 
 # Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe")
 
-# Wybór dopuszczonych zbiorników (domyślnie zaznaczone wszystkie)
-wybrane_zbiorniki = st.sidebar.multiselect(
-    "Dopuszczone zbiorniki do blendu",
-    options=wszystkie_zbiorniki,
-    default=wszystkie_zbiorniki,
+# Tworzymy DataFrame dla tabelki z checkboxami
+df_selekcja_init = pd.DataFrame({
+    "Zbiornik": lista_zbiornikow,
+    "Dostępny": [True] * len(lista_zbiornikow)  # Domyślnie wszystkie zaznaczone
+})
+
+st.sidebar.subheader("📋 Dostępność zbiorników")
+# Interaktywna tabela z ptaszkami (checkboxy)
+df_selekcja = st.sidebar.data_editor(
+    df_selekcja_init,
+    column_config={
+        "Dostępny": st.column_config.CheckboxColumn(
+            "Użyj",
+            default=True,
+        ),
+        "Zbiornik": st.column_config.TextColumn("Zbiornik", disabled=True),
+    },
+    disabled=["Zbiornik"],
+    hide_index=True,
 )
+
+# Filtrujemy listę tylko do tych z zaznaczonym ptaszkiem
+wybrane_zbiorniki = df_selekcja[df_selekcja["Dostępny"] == True]["Zbiornik"].tolist()
 
 # Docelowa masa dotyczy wyłącznie surowców (koncentratów)
 docelowa_ilosc_koncentratu = st.sidebar.number_input(
@@ -115,7 +132,7 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
     df = df[df["Dostępne_Netto"] > 0]
 
-    # FILTRACJA ZBIORNIKÓW ZGODNIE Z SELEKCJĄ W MULTISELECT
+    # FILTRACJA ZBIORNIKÓW ZGODNIE Z SELEKCJĄ Z TABELI Z CHECKBOXAMI
     df = df[df["Zbiornik"].isin(wybrane_zbiorniki)]
 
     if "Barwa (T)" in df.columns and df["Barwa (T)"].max() <= 1.0:
@@ -378,7 +395,7 @@ if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
 
           st.dataframe(res["sklad"], use_container_width=True)
         else:
-          st.error(f"Brak możliwości ułożenia blendu w podanych zakresach. Sprawdź wybrane zbiorniki lub poszerz parametry.")
+          st.error(f"Brak możliwości ułożenia blendu w podanych zakresach. Sprawdź zaznaczone zbiorniki lub poszerz parametry.")
 
   except Exception as e:
     st.error(f"Błąd przetwarzania: {e}")
